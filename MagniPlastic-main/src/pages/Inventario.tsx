@@ -62,8 +62,9 @@ export default function Inventario() {
         title="Inventario"
         description="Materias primas, pigmentos, reproceso y empaque sincronizados con base de datos."
         actions={
-          <div className="flex gap-2">
-            {isGerencia && <NuevoMaterialDialog onSuccess={loadData} />}
+          <div className="flex gap-2 flex-wrap items-center">
+            {/* Quitamos el "isGerencia &&" para forzar que el botón siempre se muestre */}
+            <NuevoMaterialDialog onSuccess={loadData} />
             <MovementDialog type="entrada" onSuccess={loadData} inventory={inventory} />
             <MovementDialog type="salida" onSuccess={loadData} inventory={inventory} />
           </div>
@@ -200,7 +201,7 @@ function NuevoMaterialDialog({ onSuccess }: { onSuccess: () => void }) {
       <DialogContent className="bg-card border-border">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">Dar de alta nuevo material</DialogTitle>
-          <DialogDescription>Se añadirá directamente a la tabla de inventario en MySQL.</DialogDescription>
+          <DialogDescription>Se añadirá directamente a la tabla de inventario.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 py-2">
           <Input placeholder="SKU (ej. RES-001)" value={sku} onChange={(e) => setSku(e.target.value)} className="bg-surface-2 font-mono" />
@@ -293,7 +294,7 @@ function MovementDialog({ type, onSuccess, inventory }: { type: "entrada" | "sal
       <DialogContent className="bg-card border-border">
         <DialogHeader>
           <DialogTitle className="font-display capitalize text-xl font-bold">Nueva {type} de material</DialogTitle>
-          <DialogDescription className="text-base">Actualización directa en base de datos MySQL.</DialogDescription>
+          <DialogDescription className="text-base">Actualización directa en base de datos.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-2">
           <div className="grid gap-1.5">

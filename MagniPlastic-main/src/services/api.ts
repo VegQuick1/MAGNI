@@ -287,3 +287,16 @@ export const actualizarContactoApi = async (id: string, data: { nombre: string; 
     if (!response.ok) throw new Error('Error al actualizar contacto');
     return response.json();
 };
+
+export const crearVentaApi = async (data: any) => {
+    const response = await fetch(`${API_URL}/ventas`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Error al registrar la venta');
+    }
+    return response.json();
+};

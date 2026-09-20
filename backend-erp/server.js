@@ -502,3 +502,30 @@ app.put('/api/contactos/:id', (req, res) => {
         res.json({ message: "Contacto actualizado correctamente" });
     });
 });
+
+app.post('/api/ventas', (req, res) => {
+    const { cliente, destino, contacto, telefono, email, condiciones_pago, monto, notas } = req.body;
+    // Generamos un folio automático para la venta
+    const folio = `VEN-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
+
+    const query = `
+        INSERT INTO ventas 
+        (folio, cliente, destino, contacto, telefono, email, condiciones_pago, monto, estatus_factura, estatus_embarque, notas) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', 'pendiente', ?)
+    `;
+    
+    db.query(query, [
+        folio, 
+        cliente, 
+        destino || 'No especificado', 
+        contacto || '', 
+        telefono || '', 
+        email || '', 
+        condiciones_pago || 'Contado', 
+        monto || 0, 
+        notas || ''
+    ], (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Venta registrada con éxito', folio, id: result.insertId });
+    });
+});

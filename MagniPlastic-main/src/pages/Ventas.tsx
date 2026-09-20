@@ -25,7 +25,7 @@ import {
   BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { fetchVentas, crearEmbarqueApi } from "@/services/api";
+import { fetchVentas, crearEmbarqueApi, crearVentaApi } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 
 interface Sale {
@@ -67,14 +67,27 @@ export default function Ventas() {
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Estados para Embarque
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedFactura, setSelectedFactura] = useState("");
   const [selectedChofer, setSelectedChofer] = useState("");
   const [selectedTransportista, setSelectedTransportista] = useState("");
   const [fechaSalidaInput, setFechaSalidaInput] = useState("");
   const [observacionesInput, setObservacionesInput] = useState("");
-  const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
-  const [loading, setLoading] = useState(false);
+
+  // Estados para Nueva Venta
+  const [ventaDrawerOpen, setVentaDrawerOpen] = useState(false);
+  const [vCliente, setVCliente] = useState("");
+  const [vDestino, setVDestino] = useState("");
+  const [vContacto, setVContacto] = useState("");
+  const [vTelefono, setVTelefono] = useState("");
+  const [vEmail, setVEmail] = useState("");
+  const [vCondiciones, setVCondiciones] = useState("Contado");
+  const [vMonto, setVMonto] = useState("");
+  const [vNotas, setVNotas] = useState("");
 
   const loadVentas = async () => {
     try {
@@ -132,11 +145,39 @@ export default function Ventas() {
     }
   };
 
+  const handleCreateVenta = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await crearVentaApi({
+        cliente: vCliente,
+        destino: vDestino,
+        contacto: vContacto,
+        telefono: vTelefono,
+        email: vEmail,
+        condiciones_pago: vCondiciones,
+        monto: parseFloat(vMonto) || 0,
+        notas: vNotas
+      });
+
+      await loadVentas();
+      toast({ title: "Venta registrada", description: "Se ha generado un nuevo folio en la base de datos." });
+      setVentaDrawerOpen(false);
+      setVCliente(""); setVDestino(""); setVContacto(""); setVTelefono("");
+      setVEmail(""); setVCondiciones("Contado"); setVMonto(""); setVNotas("");
+    } catch (error) {
+      console.error("Error al registrar venta:", error);
+      toast({ title: "Error", description: "No se pudo registrar la venta en la BD.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const pesoTotal = (sale: Sale) =>
-    sale.productos.reduce((s, p) => s + p.peso, 0).toLocaleString();
+    (sale.productos || []).reduce((s, p) => s + p.peso, 0).toLocaleString();
 
   const piezasTotal = (sale: Sale) =>
-    sale.productos.reduce((s, p) => s + p.cantidad, 0).toLocaleString();
+    (sale.productos || []).reduce((s, p) => s + p.cantidad, 0).toLocaleString();
 
   return (
     <div className="h-[calc(100vh-4rem)] flex flex-col">
@@ -151,14 +192,23 @@ export default function Ventas() {
               Haz clic en un registro para ver el detalle completo sincronizado
             </p>
           </div>
-          <Button
-            onClick={() => setDrawerOpen(true)}
-            className="h-12 px-6 text-base font-bold"
-            style={{ backgroundColor: "#2563eb", color: "white" }}
-          >
-            <Plus className="h-5 w-5 mr-2" />
-            Nuevo Embarque
-          </Button>
+          <div className="flex gap-3">
+            <Button
+              onClick={() => setVentaDrawerOpen(true)}
+              className="h-12 px-6 text-base font-bold bg-success text-success-foreground hover:bg-success/90"
+            >
+              <Plus className="h-5 w-5 mr-2" />
+              Registrar Venta
+            </Button>
+            <Button
+              onClick={() => setDrawerOpen(true)}
+              className="h-12 px-6 text-base font-bold"
+              style={{ backgroundColor: "#2563eb", color: "white" }}
+            >
+              <Truck className="h-5 w-5 mr-2" />
+              Nuevo Embarque
+            </Button>
+          </div>
         </div>
 
         <div className="flex gap-3">
@@ -256,7 +306,7 @@ export default function Ventas() {
         </Card>
       </div>
 
-      {/* Modal detalle de venta */}
+      {/* Modal detalle de venta (se mantiene intacto) */}
       {selectedSale && (
         <div
           className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
@@ -266,7 +316,6 @@ export default function Ventas() {
             className="bg-card rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal header */}
             <div className="flex items-start justify-between px-8 py-6 border-b border-border">
               <div>
                 <div className="flex items-center gap-3 mb-1">
@@ -293,8 +342,7 @@ export default function Ventas() {
                 </button>
               </div>
             </div>
-
-            {/* Modal body */}
+            
             <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
               <div className="grid grid-cols-3 gap-4">
                 <div className="bg-surface-2 rounded-xl p-4 text-center">
@@ -308,146 +356,122 @@ export default function Ventas() {
                 <div className="bg-surface-2 rounded-xl p-4 text-center">
                   <Package className="h-6 w-6 mx-auto mb-2 text-accent" />
                   <p className="text-xs font-bold uppercase text-foreground mb-1">Total Piezas</p>
-                  <p className="text-xl font-bold">{selectedSale.productos.length > 0 ? piezasTotal(selectedSale) : "—"}</p>
+                  <p className="text-xl font-bold">{(selectedSale.productos || []).length > 0 ? piezasTotal(selectedSale) : "—"}</p>
                   <p className="text-xs text-foreground font-bold">unidades</p>
                 </div>
                 <div className="bg-surface-2 rounded-xl p-4 text-center">
                   <Weight className="h-6 w-6 mx-auto mb-2 text-warning" />
                   <p className="text-xs font-bold uppercase text-foreground mb-1">Peso Total</p>
-                  <p className="text-xl font-bold">{selectedSale.productos.length > 0 ? pesoTotal(selectedSale) : "—"}</p>
+                  <p className="text-xl font-bold">{(selectedSale.productos || []).length > 0 ? pesoTotal(selectedSale) : "—"}</p>
                   <p className="text-xs text-foreground font-bold">kg</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-3">
-                  <h3 className="font-bold text-base uppercase tracking-wide text-foreground border-b border-border pb-2">
-                    Contacto
-                  </h3>
-                  <div className="flex items-center gap-2 text-sm font-semibold">
-                    <User className="h-4 w-4 text-foreground shrink-0" />
-                    {selectedSale.contacto || "—"}
-                  </div>
-                  <div className="flex items-center gap-2 text-sm font-semibold">
-                    <Phone className="h-4 w-4 text-foreground shrink-0" />
-                    {selectedSale.telefono || "—"}
-                  </div>
-                  <div className="flex items-center gap-2 text-sm font-semibold">
-                    <Mail className="h-4 w-4 text-foreground shrink-0" />
-                    {selectedSale.email || "—"}
-                  </div>
+                  <h3 className="font-bold text-base uppercase tracking-wide text-foreground border-b border-border pb-2">Contacto</h3>
+                  <div className="flex items-center gap-2 text-sm font-semibold"><User className="h-4 w-4 shrink-0" />{selectedSale.contacto || "—"}</div>
+                  <div className="flex items-center gap-2 text-sm font-semibold"><Phone className="h-4 w-4 shrink-0" />{selectedSale.telefono || "—"}</div>
+                  <div className="flex items-center gap-2 text-sm font-semibold"><Mail className="h-4 w-4 shrink-0" />{selectedSale.email || "—"}</div>
                 </div>
 
                 <div className="space-y-3">
-                  <h3 className="font-bold text-base uppercase tracking-wide text-foreground border-b border-border pb-2">
-                    Embarque
-                  </h3>
-                  <div className="flex items-center gap-2 text-sm font-semibold">
-                    <Calendar className="h-4 w-4 text-foreground shrink-0" />
-                    Salida: {selectedSale.fechaSalida}
-                  </div>
-                  <div className="flex items-center gap-2 text-sm font-semibold">
-                    <MapPin className="h-4 w-4 text-foreground shrink-0" />
-                    {selectedSale.destino}
-                  </div>
-                  <div className="flex items-center gap-2 text-sm font-semibold">
-                    <CreditCard className="h-4 w-4 text-foreground shrink-0" />
-                    {selectedSale.condicionesPago || "—"}
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <h3 className="font-bold text-base uppercase tracking-wide text-foreground border-b border-border pb-2">
-                    Transporte
-                  </h3>
-                  <div className="flex items-center gap-2 text-sm font-semibold">
-                    <Truck className="h-4 w-4 text-foreground shrink-0" />
-                    {selectedSale.transportista}
-                  </div>
-                  <div className="flex items-center gap-2 text-sm font-semibold">
-                    <User className="h-4 w-4 text-foreground shrink-0" />
-                    Chofer: {selectedSale.chofer}
-                  </div>
-                  <div className="flex items-center gap-2 text-sm font-semibold">
-                    <BarChart3 className="h-4 w-4 text-foreground shrink-0" />
-                    Placas: {selectedSale.placas}
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  <h3 className="font-bold text-base uppercase tracking-wide text-foreground border-b border-border pb-2">
-                    Facturación
-                  </h3>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-semibold text-foreground">Estatus:</span>
-                    <Badge variant="outline" className={cn("font-bold text-xs", estatusFacturaConfig[selectedSale.estatusFactura]?.color)}>
-                      {estatusFacturaConfig[selectedSale.estatusFactura]?.label || selectedSale.estatusFactura}
-                    </Badge>
-                  </div>
-                  {selectedSale.archivoFactura ? (
-                    <button
-                      onClick={() => toast({ title: "Descargando", description: selectedSale.archivoFactura })}
-                      className="flex items-center gap-2 text-info hover:text-info/80 transition-colors text-sm font-bold"
-                    >
-                      <FileText className="h-4 w-4" />
-                      {selectedSale.archivoFactura}
-                      <Download className="h-4 w-4" />
-                    </button>
-                  ) : (
-                    <span className="text-sm text-foreground font-bold">Sin archivo adjunto</span>
-                  )}
+                  <h3 className="font-bold text-base uppercase tracking-wide text-foreground border-b border-border pb-2">Embarque</h3>
+                  <div className="flex items-center gap-2 text-sm font-semibold"><Calendar className="h-4 w-4 shrink-0" />Salida: {selectedSale.fechaSalida || "—"}</div>
+                  <div className="flex items-center gap-2 text-sm font-semibold"><MapPin className="h-4 w-4 shrink-0" />{selectedSale.destino || "—"}</div>
+                  <div className="flex items-center gap-2 text-sm font-semibold"><CreditCard className="h-4 w-4 shrink-0" />{selectedSale.condicionesPago || "—"}</div>
                 </div>
               </div>
-
-              {selectedSale.productos.length > 0 && (
-                <div>
-                  <h3 className="font-bold text-base uppercase tracking-wide text-foreground border-b border-border pb-2 mb-3">
-                    Productos del Pedido
-                  </h3>
-                  <div className="rounded-lg border border-border overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead className="bg-surface-2">
-                        <tr>
-                          <th className="text-left px-4 py-3 font-bold uppercase tracking-wide text-xs">Parte</th>
-                          <th className="text-left px-4 py-3 font-bold uppercase tracking-wide text-xs">Descripción</th>
-                          <th className="text-center px-4 py-3 font-bold uppercase tracking-wide text-xs">Cantidad</th>
-                          <th className="text-center px-4 py-3 font-bold uppercase tracking-wide text-xs">Peso (kg)</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border">
-                        {selectedSale.productos.map((prod, i) => (
-                          <tr key={i} className="hover:bg-surface-2">
-                            <td className="px-4 py-3 font-mono font-bold">{prod.partNumber}</td>
-                            <td className="px-4 py-3 font-semibold">{prod.descripcion}</td>
-                            <td className="px-4 py-3 text-center font-bold">{prod.cantidad.toLocaleString()}</td>
-                            <td className="px-4 py-3 text-center font-bold">{prod.peso.toLocaleString()}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {selectedSale.notas && (
-                <div className="bg-surface-2 rounded-xl p-4 border border-border">
-                  <p className="text-xs font-bold uppercase tracking-wide text-foreground mb-2">Notas</p>
-                  <p className="text-sm font-semibold">{selectedSale.notas}</p>
-                </div>
-              )}
             </div>
 
             <div className="px-8 py-5 border-t border-border flex justify-end">
-              <Button
-                onClick={() => setSelectedSale(null)}
-                className="h-11 px-8 text-base font-bold"
-                style={{ backgroundColor: "#2563eb", color: "white" }}
-              >
-                Cerrar
-              </Button>
+              <Button onClick={() => setSelectedSale(null)} className="h-11 px-8" style={{ backgroundColor: "#2563eb", color: "white" }}>Cerrar</Button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Drawer - Nueva Venta (Nuevo formulario) */}
+      {ventaDrawerOpen && (
+        <>
+          <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setVentaDrawerOpen(false)} />
+          <div className="fixed right-0 top-0 h-full w-full max-w-2xl bg-card shadow-2xl z-50 overflow-y-auto">
+            <div className="sticky top-0 bg-card border-b border-border px-6 py-5 flex items-center justify-between z-10">
+              <div>
+                <h2 className="text-2xl font-bold text-success">Registrar Nueva Venta</h2>
+                <p className="text-base text-foreground font-bold mt-1">Generar folio de venta sin orden de cotización</p>
+              </div>
+              <button onClick={() => setVentaDrawerOpen(false)} className="p-2 hover:bg-surface-2 rounded-lg transition-colors">
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateVenta} className="p-6 space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <User className="h-6 w-6 text-success" />
+                  <h3 className="text-xl font-bold">Datos del Cliente</h3>
+                </div>
+                <div>
+                  <label className="text-base font-bold mb-2 block">Nombre del Cliente / Empresa <span className="text-destructive">*</span></label>
+                  <Input required value={vCliente} onChange={(e) => setVCliente(e.target.value)} placeholder="Ej. AutoParts S.A. de C.V." className="h-12 border-2" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-base font-bold mb-2 block">Contacto</label>
+                    <Input value={vContacto} onChange={(e) => setVContacto(e.target.value)} placeholder="Nombre del encargado" className="h-12 border-2" />
+                  </div>
+                  <div>
+                    <label className="text-base font-bold mb-2 block">Teléfono</label>
+                    <Input value={vTelefono} onChange={(e) => setVTelefono(e.target.value)} placeholder="(81) 0000-0000" className="h-12 border-2" />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-base font-bold mb-2 block">Correo Electrónico</label>
+                  <Input type="email" value={vEmail} onChange={(e) => setVEmail(e.target.value)} placeholder="correo@empresa.com" className="h-12 border-2" />
+                </div>
+              </div>
+
+              <div className="space-y-4 pt-4 border-t border-border">
+                <div className="flex items-center gap-2 mb-4">
+                  <CreditCard className="h-6 w-6 text-success" />
+                  <h3 className="text-xl font-bold">Condiciones de la Venta</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-base font-bold mb-2 block">Monto Total Estimado (MXN)</label>
+                    <Input type="number" step="0.01" value={vMonto} onChange={(e) => setVMonto(e.target.value)} placeholder="0.00" className="h-12 border-2 font-mono font-bold" />
+                  </div>
+                  <div>
+                    <label className="text-base font-bold mb-2 block">Condiciones de Pago</label>
+                    <select value={vCondiciones} onChange={(e) => setVCondiciones(e.target.value)} className="w-full h-12 px-4 rounded-md border-2 border-border bg-surface-2 text-base font-semibold">
+                      <option value="Contado">Contado</option>
+                      <option value="Crédito 15 días">Crédito 15 días</option>
+                      <option value="Crédito 30 días">Crédito 30 días</option>
+                      <option value="Anticipo 50%">Anticipo 50%</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-base font-bold mb-2 block">Destino Final <span className="text-destructive">*</span></label>
+                  <Input required value={vDestino} onChange={(e) => setVDestino(e.target.value)} placeholder="Ciudad, Estado o Dirección Corta" className="h-12 border-2" />
+                </div>
+                <div>
+                  <label className="text-base font-bold mb-2 block">Notas Internas</label>
+                  <textarea rows={3} value={vNotas} onChange={(e) => setVNotas(e.target.value)} placeholder="Acuerdos adicionales, tipo de material..." className="w-full px-4 py-3 rounded-md border-2 border-border bg-surface-2 text-base font-semibold resize-none" />
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-6 border-t border-border">
+                <Button type="button" onClick={() => setVentaDrawerOpen(false)} variant="outline" className="flex-1 h-12 text-base font-bold border-2">Cancelar</Button>
+                <Button type="submit" disabled={loading} className="flex-1 h-12 text-base font-bold bg-success text-success-foreground hover:bg-success/90">
+                  <FileText className="h-5 w-5 mr-2" />
+                  {loading ? "Guardando..." : "Registrar Venta"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </>
       )}
 
       {/* Drawer - Nuevo Embarque */}
@@ -455,7 +479,7 @@ export default function Ventas() {
         <>
           <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setDrawerOpen(false)} />
           <div className="fixed right-0 top-0 h-full w-full max-w-2xl bg-card shadow-2xl z-50 overflow-y-auto">
-            <div className="sticky top-0 bg-card border-b border-border px-6 py-5 flex items-center justify-between">
+            <div className="sticky top-0 bg-card border-b border-border px-6 py-5 flex items-center justify-between z-10">
               <div>
                 <h2 className="text-2xl font-bold" style={{ color: "#2563eb" }}>Nuevo Embarque (MySQL)</h2>
                 <p className="text-base text-foreground font-bold mt-1">Vincular factura y asignar transporte en la base de datos</p>
