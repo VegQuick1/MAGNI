@@ -1,11 +1,35 @@
 {
-  "name": "@figma/my-make-file",
+  "name": "magniplastic",
+  "version": "1.0.0",
   "private": true,
-  "version": "0.0.1",
   "type": "module",
+  "main": "main.cjs",
+  "description": "PlastiControl ERP",
+  "author": "Gerardo",
+  "license": "ISC",
   "scripts": {
+    "dev": "vite",
     "build": "vite build",
-    "dev": "vite"
+    "preview": "vite preview",
+    "electron:start": "electron .",
+    "electron:build": "electron-builder"
+  },
+  "build": {
+    "appId": "com.magniplastic.erp",
+    "productName": "PlastiControl",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "extraResources": [
+      {
+        "from": "backend-bin",
+        "to": "backend-bin",
+        "filter": ["**/*"]
+      }
+    ]
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -71,6 +95,8 @@
   "devDependencies": {
     "@tailwindcss/vite": "4.1.12",
     "@vitejs/plugin-react": "4.7.0",
+    "electron": "^44.4.3",
+    "electron-builder": "^26.15.3",
     "tailwindcss": "4.1.12",
     "vite": "6.3.5"
   },
@@ -90,10 +116,5 @@
     "overrides": {
       "vite": "6.3.5"
     }
-  },
-  "description": "This is a code bundle for Magniplastic (Copia). The original project is available at https://www.figma.com/design/pPcvXbdGdHVd1q4ht2cAVe/Magniplastic--Copia-.",
-  "main": "index.js",
-  "keywords": [],
-  "author": "",
-  "license": "ISC"
+  }
 }

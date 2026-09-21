@@ -8,13 +8,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Conexión a la BD
-const db = mysql.createPool({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME
-});
+
 
 // --- AUTENTICACIÓN / LOGIN ---
 app.post('/api/auth/login', (req, res) => {
@@ -528,4 +522,19 @@ app.post('/api/ventas', (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ message: 'Venta registrada con éxito', folio, id: result.insertId });
     });
+});     
+
+
+// --- UNIFICACIÓN FRONTEND/BACKEND ---
+app.use(express.static(path.join(__dirname, 'dist')));
+
+app.get(/^(?!\/api).*/, (req, res) => {
+    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+});
+
+const db = mysql.createPool({
+    host: 'localhost',
+    user: 'root',
+    password: 'password', // o tu contraseña de MySQL
+    database: 'magni_plastic_erp' // asegúrate de poner el nombre exacto de tu BD
 });

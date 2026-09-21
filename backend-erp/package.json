@@ -1,9 +1,11 @@
 {
   "name": "backend-erp",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Backend para PlastiControl ERP",
+  "main": "server.js",
+  "bin": "server.js",
   "scripts": {
+    "start": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -15,5 +17,16 @@
     "dotenv": "^18.0.1",
     "express": "^5.2.1",
     "mysql2": "^3.24.4"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  },
+  "pkg": {
+    "assets": [
+      "dist/**/*"
+    ],
+    "targets": [
+      "node18-win-x64"
+    ]
   }
 }
