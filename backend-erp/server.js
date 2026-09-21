@@ -1,25 +1,202 @@
 const express = require('express');
 const cors = require('cors');
-const mysql = require('mysql2');
+const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 require('dotenv').config();
+try {
+    require('sqlite3/lib/binding/node-v108-win32-x64/node_sqlite3.node');
+} catch (e) {}
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+// --- CONEXIÓN E INICIALIZACIÓN DE SQLITE ---
+const isPacked = process.pkg;
+const dbDir = isPacked ? path.dirname(process.execPath) : __dirname;
+const dbFile = path.join(dbDir, 'magniplastic.db');
 
+const db = new sqlite3.Database(dbFile, (err) => {
+    if (err) {
+        console.error('Error al abrir la base de datos SQLite', err.message);
+    } else {
+        console.log('Conectado a la base de datos SQLite local.');
+    }
+});
+
+// Crear tablas y datos iniciales de forma automática si no existen
+db.serialize(() => {
+    // --- CREACIÓN DE TABLAS ---
+    db.run(`CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT UNIQUE,
+        password TEXT,
+        role TEXT,
+        nombre TEXT
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS inventario (
+        sku TEXT PRIMARY KEY,
+        name TEXT,
+        category TEXT,
+        location TEXT,
+        stock REAL,
+        min_stock REAL,
+        unit TEXT
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS tareas_operador (
+        id TEXT PRIMARY KEY,
+        status TEXT,
+        machine TEXT,
+        product TEXT,
+        target INTEGER,
+        current INTEGER,
+        priority TEXT
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS asistencia (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        numero_empleado TEXT,
+        tipo_evento TEXT,
+        hora TEXT
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS bitacoras_produccion (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        codigo_bitacora TEXT,
+        proceso TEXT,
+        maquina TEXT,
+        operador TEXT,
+        turno TEXT,
+        hora_inicio TEXT,
+        hora_fin TEXT,
+        observaciones TEXT
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS ordenes_compra (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        codigo_orden TEXT,
+        proveedor TEXT,
+        material TEXT,
+        qty REAL,
+        unit TEXT,
+        precio_unitario REAL,
+        amount REAL,
+        eta TEXT,
+        prioridad TEXT,
+        notas TEXT,
+        estatus TEXT
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS configuracion_usuario (
+        usuario_id TEXT PRIMARY KEY,
+        tipo_letra TEXT,
+        idioma TEXT,
+        modo_oscuro INTEGER
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS contactos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT,
+        empresa TEXT,
+        telefono TEXT,
+        email TEXT,
+        tipo TEXT
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS cotizaciones (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        folio TEXT,
+        cliente TEXT,
+        segmento TEXT,
+        responsable TEXT,
+        producto TEXT,
+        cantidad REAL,
+        unidad TEXT,
+        precio_unitario REAL,
+        subtotal REAL,
+        iva REAL,
+        total REAL,
+        validez TEXT,
+        condiciones TEXT,
+        notas TEXT,
+        estatus TEXT
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS solicitudes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        folio TEXT,
+        tipo TEXT,
+        empleado TEXT,
+        numero_empleado TEXT,
+        area TEXT,
+        turno TEXT,
+        prioridad TEXT,
+        descripcion TEXT,
+        fecha TEXT,
+        estatus TEXT,
+        archivo TEXT
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS ventas (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        folio TEXT,
+        cliente TEXT,
+        estatus_factura TEXT,
+        archivo_factura TEXT,
+        estatus_embarque TEXT,
+        fecha_salida TEXT,
+        destino TEXT,
+        contacto TEXT,
+        telefono TEXT,
+        email TEXT,
+        condiciones_pago TEXT,
+        monto REAL,
+        chofer TEXT,
+        transportista TEXT,
+        placas TEXT,
+        notas TEXT
+    )`);
+
+    // --- INSERCIÓN DE DATOS INICIALES (SEEDERS) ---
+    
+    // 1. Usuarios de prueba
+    db.get(`SELECT COUNT(*) as count FROM usuarios`, (err, row) => {
+        if (row && row.count === 0) {
+            db.run(`INSERT INTO usuarios (email, password, role, nombre) VALUES ('gerencia@magniplastic.com', 'gerencia123', 'gerencia', 'Gerente General')`);
+            db.run(`INSERT INTO usuarios (email, password, role, nombre) VALUES ('operador@magniplastic.com', 'operador123', 'operador', 'Operador de Planta')`);
+        }
+    });
+
+    // 2. Inventario inicial
+    db.get(`SELECT COUNT(*) as count FROM inventario`, (err, row) => {
+        if (row && row.count === 0) {
+            db.run(`INSERT INTO inventario (sku, name, category, location, stock, min_stock, unit) VALUES ('#30-32-25', 'Contenedor Colapsable 30X32X25', 'Resina', 'Almacén A-1', 250, 100, 'pza')`);
+            db.run(`INSERT INTO inventario (sku, name, category, location, stock, min_stock, unit) VALUES ('#45-48-34', 'Contenedor Industrial 45X48X34', 'Resina', 'Almacén A-2', 80, 150, 'pza')`);
+            db.run(`INSERT INTO inventario (sku, name, category, location, stock, min_stock, unit) VALUES ('PIG-AZL', 'Pigmento Azul Industrial', 'Pigmento', 'Estante P-3', 45, 50, 'kg')`);
+        }
+    });
+
+    // 3. Tareas iniciales del operador
+    db.get(`SELECT COUNT(*) as count FROM tareas_operador`, (err, row) => {
+        if (row && row.count === 0) {
+            db.run(`INSERT INTO tareas_operador (id, status, machine, product, target, current, priority) VALUES ('OP-001', 'in_progress', 'Inyectora #04', 'Contenedor Colapsable 45X48X34', 1500, 450, 'high')`);
+            db.run(`INSERT INTO tareas_operador (id, status, machine, product, target, current, priority) VALUES ('OP-002', 'pending', 'Inyectora #02', 'Carcasa Modelo X - Magniplastic', 800, 0, 'medium')`);
+            db.run(`INSERT INTO tareas_operador (id, status, machine, product, target, current, priority) VALUES ('OP-003', 'completed', 'Extrusora #01', 'Charola Industrial 40X48X25', 2000, 2000, 'low')`);
+        }
+    });
+});
 
 // --- AUTENTICACIÓN / LOGIN ---
 app.post('/api/auth/login', (req, res) => {
     const { email, password } = req.body;
     const query = 'SELECT email, role, nombre FROM usuarios WHERE email = ? AND password = ?';
-    db.query(query, [email, password], (err, results) => {
+    db.get(query, [email, password], (err, user) => {
         if (err) return res.status(500).json({ error: err.message });
-        if (results.length === 0) {
+        if (!user) {
             return res.status(401).json({ error: "Credenciales incorrectas." });
         }
-        const user = results[0];
         res.json({
             message: "Inicio de sesión exitoso",
             email: user.email,
@@ -33,41 +210,53 @@ app.post('/api/auth/login', (req, res) => {
 app.post('/api/asistencia', (req, res) => {
     const { numero_empleado, tipo_evento, hora } = req.body;
     const query = 'INSERT INTO asistencia (numero_empleado, tipo_evento, hora) VALUES (?, ?, ?)';
-    db.query(query, [numero_empleado || 'EMP-001', tipo_evento, hora], (err, results) => {
+    db.run(query, [numero_empleado || 'EMP-001', tipo_evento, hora], function(err) {
         if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: "Asistencia registrada correctamente", id: results.insertId });
+        res.json({ message: "Asistencia registrada correctamente", id: this.lastID });
     });
 });
 
 // --- INVENTARIO ---
 app.get('/api/inventario', (req, res) => {
-    db.query('SELECT sku, name, category, location, stock, min_stock as `min`, unit FROM inventario', (err, results) => {
+    db.all('SELECT sku, name, category, location, stock, min_stock as min, unit FROM inventario', [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(results);
+        res.json(rows);
     });
 });
 
 app.post('/api/inventario/movimiento', (req, res) => {
     const { sku, tipo, cantidad, lote, notas } = req.body;
     const insertQuery = 'INSERT INTO movimientos_inventario (sku, tipo, cantidad, lote, notas) VALUES (?, ?, ?, ?, ?)';
-    db.query(insertQuery, [sku, tipo, cantidad, lote || '', notas || ''], (err) => {
+    db.run(insertQuery, [sku, tipo, cantidad, lote || '', notas || ''], function(err) {
         if (err) return res.status(500).json({ error: err.message });
 
         const operador = tipo === 'entrada' ? '+' : '-';
         const updateQuery = `UPDATE inventario SET stock = stock ${operador} ? WHERE sku = ?`;
         
-        db.query(updateQuery, [cantidad, sku], (err2) => {
+        db.run(updateQuery, [cantidad, sku], (err2) => {
             if (err2) return res.status(500).json({ error: err2.message });
             res.json({ message: `Movimiento de ${tipo} registrado con éxito` });
         });
     });
 });
 
+app.post('/api/inventario/nuevo', (req, res) => {
+    const { sku, name, category, location, stock, min, unit } = req.body;
+    const query = `
+        INSERT INTO inventario (sku, name, category, location, stock, min_stock, unit) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    `;
+    db.run(query, [sku, name, category, location, stock || 0, min || 50, unit || 'pza'], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: "Material creado exitosamente en inventario", id: this.lastID });
+    });
+});
+
 // --- BITÁCORAS DE PRODUCCIÓN ---
 app.get('/api/bitacoras', (req, res) => {
-    db.query('SELECT * FROM bitacoras_produccion ORDER BY id DESC', (err, results) => {
+    db.all('SELECT * FROM bitacoras_produccion ORDER BY id DESC', [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        const formatted = results.map(row => ({
+        const formatted = rows.map(row => ({
             id: row.codigo_bitacora || `BIT-${3320 + row.id}`,
             process: row.proceso,
             machine: row.maquina,
@@ -88,16 +277,16 @@ app.post('/api/bitacoras', (req, res) => {
         INSERT INTO bitacoras_produccion (codigo_bitacora, proceso, maquina, operador, turno, hora_inicio, hora_fin, observaciones) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `;
-    db.query(query, [codigo, proceso, maquina, operador, turno, hora_inicio, hora_fin || '—', observaciones], (err, results) => {
+    db.run(query, [codigo, proceso, maquina, operador, turno, hora_inicio, hora_fin || '—', observaciones], function(err) {
         if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: "Bitácora guardada exitosamente", id: results.insertId });
+        res.json({ message: "Bitácora guardada exitosamente", id: this.lastID });
     });
 });
 
 app.get('/api/bitacoras-produccion', (req, res) => {
-    db.query('SELECT * FROM bitacoras_produccion ORDER BY id DESC', (err, results) => {
+    db.all('SELECT * FROM bitacoras_produccion ORDER BY id DESC', [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        const formatted = results.map(row => ({
+        const formatted = rows.map(row => ({
             id: row.id,
             process: row.proceso,
             machine: row.maquina,
@@ -120,17 +309,17 @@ app.post('/api/bitacoras-produccion', (req, res) => {
         (codigo_bitacora, proceso, maquina, operador, turno, hora_inicio, hora_fin, observaciones) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `;
-    db.query(query, [codigo, process, machine, operator, shift, startedAt, endedAt || '—', note], (err, results) => {
+    db.run(query, [codigo, process, machine, operator, shift, startedAt, endedAt || '—', note], function(err) {
         if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: "Bitácora de producción guardada con éxito", id: results.insertId });
+        res.json({ message: "Bitácora de producción guardada con éxito", id: this.lastID });
     });
 });
 
 // --- COMPRAS Y ÓRDENES ---
 app.get('/api/compras', (req, res) => {
-    db.query('SELECT * FROM ordenes_compra ORDER BY id DESC', (err, results) => {
+    db.all('SELECT * FROM ordenes_compra ORDER BY id DESC', [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        const formatted = results.map(row => ({
+        const formatted = rows.map(row => ({
             id: row.codigo_orden || `OC-2026-${120 + row.id}`,
             supplier: row.proveedor,
             material: row.material,
@@ -144,27 +333,43 @@ app.get('/api/compras', (req, res) => {
     });
 });
 
+app.post('/api/compras', (req, res) => {
+    const { proveedor, material, cantidad, unidad, precio_unitario, total_estimado, fecha_entrega, prioridad, notas } = req.body;
+    const codigo = `OC-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000)}`;
+    
+    const query = `
+        INSERT INTO ordenes_compra (codigo_orden, proveedor, material, qty, unit, precio_unitario, amount, eta, prioridad, notas, estatus)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pendiente')
+    `;
+    db.run(query, [codigo, proveedor || 'Proveedor Asignado', material, cantidad, unidad, precio_unitario, total_estimado, fecha_entrega, prioridad, notas], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Orden creada exitosamente', id: this.lastID });
+    });
+});
 
 // --- CONFIGURACIÓN DE USUARIO ---
 app.get('/api/configuracion/:usuario', (req, res) => {
     const { usuario } = req.params;
-    db.query('SELECT * FROM configuracion_usuario WHERE usuario_id = ?', [usuario], (err, results) => {
+    db.get('SELECT * FROM configuracion_usuario WHERE usuario_id = ?', [usuario], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
-        if (results.length === 0) {
+        if (!row) {
             return res.json({ tipo_letra: 'Roboto', idioma: 'Español (MX)', modo_oscuro: false });
         }
-        res.json(results[0]);
+        res.json({
+            tipo_letra: row.tipo_letra,
+            idioma: row.idioma,
+            modo_oscuro: row.modo_oscuro === 1
+        });
     });
 });
 
 app.post('/api/configuracion', (req, res) => {
     const { usuario_id, tipo_letra, idioma, modo_oscuro } = req.body;
     const query = `
-        INSERT INTO configuracion_usuario (usuario_id, tipo_letra, idioma, modo_oscuro) 
+        INSERT OR REPLACE INTO configuracion_usuario (usuario_id, tipo_letra, idioma, modo_oscuro) 
         VALUES (?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE tipo_letra = ?, idioma = ?, modo_oscuro = ?
     `;
-    db.query(query, [usuario_id || 'EMP-001', tipo_letra, idioma, modo_oscuro, tipo_letra, idioma, modo_oscuro], (err) => {
+    db.run(query, [usuario_id || 'EMP-001', tipo_letra, idioma, modo_oscuro ? 1 : 0], (err) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ message: "Configuración actualizada correctamente" });
     });
@@ -172,9 +377,9 @@ app.post('/api/configuracion', (req, res) => {
 
 // --- CONTACTOS ---
 app.get('/api/contactos', (req, res) => {
-    db.query('SELECT * FROM contactos ORDER BY id DESC', (err, results) => {
+    db.all('SELECT * FROM contactos ORDER BY id DESC', [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        const formatted = results.map(row => ({
+        const formatted = rows.map(row => ({
             id: row.id.toString(),
             name: row.nombre,
             company: row.empresa,
@@ -190,23 +395,41 @@ app.get('/api/contactos', (req, res) => {
 app.post('/api/contactos', (req, res) => {
     const { nombre, empresa, telefono, email, tipo } = req.body;
     const query = 'INSERT INTO contactos (nombre, empresa, telefono, email, tipo) VALUES (?, ?, ?, ?, ?)';
-    db.query(query, [nombre, empresa, telefono || '-', email, tipo], (err, results) => {
+    db.run(query, [nombre, empresa, telefono || '-', email, tipo], function(err) {
         if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: "Contacto guardado exitosamente", id: results.insertId });
+        res.json({ message: "Contacto guardado exitosamente", id: this.lastID });
+    });
+});
+
+app.delete('/api/contactos/:id', (req, res) => {
+    const { id } = req.params;
+    db.run('DELETE FROM contactos WHERE id = ?', [id], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: "Contacto eliminado correctamente" });
+    });
+});
+
+app.put('/api/contactos/:id', (req, res) => {
+    const { id } = req.params;
+    const { nombre, empresa, telefono, email, tipo } = req.body;
+    const query = 'UPDATE contactos SET nombre = ?, empresa = ?, telefono = ?, email = ?, tipo = ? WHERE id = ?';
+    db.run(query, [nombre, empresa, telefono, email, tipo, id], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: "Contacto actualizado correctamente" });
     });
 });
 
 // --- COTIZACIONES ---
 app.get('/api/cotizaciones', (req, res) => {
-    db.query('SELECT * FROM cotizaciones ORDER BY id DESC', (err, results) => {
+    db.all('SELECT * FROM cotizaciones ORDER BY id DESC', [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        const formatted = results.map(row => ({
+        const formatted = rows.map(row => ({
             id: row.folio,
             client: row.cliente,
             segment: row.segmento,
             amount: parseFloat(row.total),
             owner: row.responsable,
-            date: row.validez ? row.validez.toISOString().split('T')[0] : '2026-06-01',
+            date: row.validez || '2026-06-01',
             status: row.estatus,
             producto: row.producto,
             cantidad: row.cantidad,
@@ -231,9 +454,9 @@ app.post('/api/cotizaciones', (req, res) => {
         (folio, cliente, segmento, responsable, producto, cantidad, unidad, precio_unitario, subtotal, iva, total, validez, condiciones, notas, estatus) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'En revisión')
     `;
-    db.query(query, [folio, cliente, segmento, responsable, producto, cantidad, unidad, precioUnitario, subtotal, iva, total, validez, condiciones, notas], (err, results) => {
+    db.run(query, [folio, cliente, segmento, responsable, producto, cantidad, unidad, precioUnitario, subtotal, iva, total, validez, condiciones, notas], function(err) {
         if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: "Cotización generada con éxito", folio, id: results.insertId });
+        res.json({ message: "Cotización generada con éxito", folio, id: this.lastID });
     });
 });
 
@@ -241,26 +464,25 @@ app.post('/api/cotizaciones', (req, res) => {
 app.post('/api/auth/recuperar', (req, res) => {
     const { email } = req.body;
     const checkUser = 'SELECT * FROM usuarios WHERE email = ?';
-    db.query(checkUser, [email], (err, results) => {
+    db.get(checkUser, [email], (err, user) => {
         if (err) return res.status(500).json({ error: err.message });
         
         const token = Math.random().toString(36).substring(2) + Date.now().toString(36);
-        const expiracion = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        const expiracion = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
         const insertToken = 'INSERT INTO recuperacion_password (email, token, expiracion) VALUES (?, ?, ?)';
-        db.query(insertToken, [email, token, expiracion], (err2) => {
+        db.run(insertToken, [email, token, expiracion], (err2) => {
             if (err2) return res.status(500).json({ error: err2.message });
             res.json({ message: "Se han enviado las instrucciones de recuperación al correo." });
         });
     });
 });
 
-
 // --- SOLICITUDES INTERNAS ---
 app.get('/api/solicitudes', (req, res) => {
-    db.query('SELECT * FROM solicitudes ORDER BY id DESC', (err, results) => {
+    db.all('SELECT * FROM solicitudes ORDER BY id DESC', [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        const formatted = results.map(row => ({
+        const formatted = rows.map(row => ({
             id: row.id.toString(),
             folio: row.folio,
             type: row.tipo,
@@ -271,7 +493,7 @@ app.get('/api/solicitudes', (req, res) => {
             priority: row.prioridad,
             descripcion: row.descripcion,
             status: row.estatus,
-            date: row.fecha ? row.fecha.toISOString().split('T')[0] : '',
+            date: row.fecha || '',
             archivo: row.archivo
         }));
         res.json(formatted);
@@ -288,17 +510,17 @@ app.post('/api/solicitudes', (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', ?)
     `;
     
-    db.query(query, [folio, tipo, empleado, numero_empleado, area, turno, prioridad, descripcion, fecha, archivo || null], (err, result) => {
+    db.run(query, [folio, tipo, empleado, numero_empleado, area, turno, prioridad, descripcion, fecha, archivo || null], function(err) {
         if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: 'Solicitud creada con éxito', id: result.insertId });
+        res.json({ message: 'Solicitud creada con éxito', id: this.lastID });
     });
 });
 
 // --- TAREAS DEL OPERADOR ---
 app.get('/api/tareas-operador', (req, res) => {
-    db.query('SELECT * FROM tareas_operador ORDER BY id ASC', (err, results) => {
+    db.all('SELECT * FROM tareas_operador ORDER BY id ASC', [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(results);
+        res.json(rows);
     });
 });
 
@@ -315,7 +537,7 @@ app.put('/api/tareas-operador/:id', (req, res) => {
     query += ' WHERE id = ?';
     params.push(id);
 
-    db.query(query, params, (err) => {
+    db.run(query, params, (err) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ message: "Tarea actualizada correctamente" });
     });
@@ -323,16 +545,14 @@ app.put('/api/tareas-operador/:id', (req, res) => {
 
 // --- VENTAS Y EMBARQUES ---
 app.get('/api/ventas', (req, res) => {
-    const queryVentas = 'SELECT * FROM ventas ORDER BY id DESC';
-    db.query(queryVentas, (err, ventasResults) => {
+    db.all('SELECT * FROM ventas ORDER BY id DESC', [], (err, ventasRows) => {
         if (err) return res.status(500).json({ error: err.message });
 
-        const queryProductos = 'SELECT * FROM productos_venta';
-        db.query(queryProductos, (err, prodResults) => {
-            if (err) return res.status(500).json({ error: err.message });
+        db.all('SELECT * FROM productos_venta', [], (err2, prodRows) => {
+            if (err2) return res.status(500).json({ error: err2.message });
 
-            const formatted = ventasResults.map(sale => {
-                const prods = prodResults
+            const formatted = ventasRows.map(sale => {
+                const prods = prodRows
                     .filter(p => p.venta_id === sale.id)
                     .map(p => ({
                         partNumber: p.part_number,
@@ -371,10 +591,10 @@ app.post('/api/embarques', (req, res) => {
     const { factura, chofer, transportista, fechaSalida, observaciones } = req.body;
     const query = `
         UPDATE ventas 
-        SET estatus_embarque = 'en_transito', chofer = ?, transportista = ?, fecha_salida = ?, notas = CONCAT(IFNULL(notas, ''), ' | Observación: ', ?)
-        WHERE folio = ? OR archivo_factura LIKE CONCAT('%', ?, '%')
+        SET estatus_embarque = 'en_transito', chofer = ?, transportista = ?, fecha_salida = ?, notas = COALESCE(notas, '') || ' | Observación: ' || ?
+        WHERE folio = ? OR archivo_factura LIKE ?
     `;
-    db.query(query, [chofer, transportista, fechaSalida, observaciones || '', factura, factura], (err) => {
+    db.run(query, [chofer, transportista, fechaSalida, observaciones || '', factura, `%${factura}%`], (err) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ message: "Embarque creado y vinculado con éxito" });
     });
@@ -382,12 +602,10 @@ app.post('/api/embarques', (req, res) => {
 
 app.get('/api/detalle-embarque/:orderNumber', (req, res) => {
     const { orderNumber } = req.params;
-    const queryEmbarque = 'SELECT * FROM detalle_embarques WHERE order_number = ?';
-    db.query(queryEmbarque, [orderNumber], (err, embarqueResults) => {
+    db.get('SELECT * FROM detalle_embarques WHERE order_number = ?', [orderNumber], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
-        if (embarqueResults.length === 0) return res.status(404).json({ error: 'Embarque no encontrado' });
+        if (!row) return res.status(404).json({ error: 'Embarque no encontrado' });
 
-        const row = embarqueResults[0];
         const data = {
             orderNumber: row.order_number,
             shipmentNumber: row.shipment_number,
@@ -438,6 +656,32 @@ app.get('/api/detalle-embarque/:orderNumber', (req, res) => {
     });
 });
 
+app.post('/api/ventas', (req, res) => {
+    const { cliente, destino, contacto, telefono, email, condiciones_pago, monto, notas } = req.body;
+    const folio = `VEN-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
+
+    const query = `
+        INSERT INTO ventas 
+        (folio, cliente, destino, contacto, telefono, email, condiciones_pago, monto, estatus_factura, estatus_embarque, notas) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', 'pendiente', ?)
+    `;
+    
+    db.run(query, [
+        folio, 
+        cliente, 
+        destino || 'No especificado', 
+        contacto || '', 
+        telefono || '', 
+        email || '', 
+        condiciones_pago || 'Contado', 
+        monto || 0, 
+        notas || ''
+    ], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: 'Venta registrada con éxito', folio, id: this.lastID });
+    });
+}); 
+
 // --- UNIFICACIÓN FRONTEND/BACKEND ---
 app.use(express.static(path.join(__dirname, 'dist')));
 
@@ -448,93 +692,4 @@ app.get(/^(?!\/api).*/, (req, res) => {
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
     console.log(`ERP de Magni Plastic ejecutándose en http://localhost:${PORT}`);
-});
-
-app.post('/api/inventario/nuevo', (req, res) => {
-    const { sku, name, category, location, stock, min, unit } = req.body;
-    const query = `
-        INSERT INTO inventario (sku, name, category, location, stock, min_stock, unit) 
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-    `;
-    db.query(query, [sku, name, category, location, stock || 0, min || 50, unit || 'pza'], (err) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: "Material creado exitosamente en inventario" });
-    });
-});
-
-// --- COMPRAS (Actualización para guardar el proveedor correcto) ---
-app.post('/api/compras', (req, res) => {
-    const { proveedor, material, cantidad, unidad, precio_unitario, total_estimado, fecha_entrega, prioridad, notas } = req.body;
-    const codigo = `OC-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000)}`;
-    
-    const query = `
-        INSERT INTO ordenes_compra (codigo_orden, proveedor, material, qty, unit, precio_unitario, amount, eta, prioridad, notas, estatus)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pendiente')
-    `;
-    db.query(query, [codigo, proveedor || 'Proveedor Asignado', material, cantidad, unidad, precio_unitario, total_estimado, fecha_entrega, prioridad, notas], (err, result) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: 'Orden creada exitosamente', id: result.insertId });
-    });
-});
-
-// --- ELIMINAR CONTACTO ---
-app.delete('/api/contactos/:id', (req, res) => {
-    const { id } = req.params;
-    db.query('DELETE FROM contactos WHERE id = ?', [id], (err) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: "Contacto eliminado correctamente" });
-    });
-});
-
-// --- EDITAR CONTACTO ---
-app.put('/api/contactos/:id', (req, res) => {
-    const { id } = req.params;
-    const { nombre, empresa, telefono, email, tipo } = req.body;
-    const query = 'UPDATE contactos SET nombre = ?, empresa = ?, telefono = ?, email = ?, tipo = ? WHERE id = ?';
-    db.query(query, [nombre, empresa, telefono, email, tipo, id], (err) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: "Contacto actualizado correctamente" });
-    });
-});
-
-app.post('/api/ventas', (req, res) => {
-    const { cliente, destino, contacto, telefono, email, condiciones_pago, monto, notas } = req.body;
-    // Generamos un folio automático para la venta
-    const folio = `VEN-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`;
-
-    const query = `
-        INSERT INTO ventas 
-        (folio, cliente, destino, contacto, telefono, email, condiciones_pago, monto, estatus_factura, estatus_embarque, notas) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pendiente', 'pendiente', ?)
-    `;
-    
-    db.query(query, [
-        folio, 
-        cliente, 
-        destino || 'No especificado', 
-        contacto || '', 
-        telefono || '', 
-        email || '', 
-        condiciones_pago || 'Contado', 
-        monto || 0, 
-        notas || ''
-    ], (err, result) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: 'Venta registrada con éxito', folio, id: result.insertId });
-    });
-});     
-
-
-// --- UNIFICACIÓN FRONTEND/BACKEND ---
-app.use(express.static(path.join(__dirname, 'dist')));
-
-app.get(/^(?!\/api).*/, (req, res) => {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-});
-
-const db = mysql.createPool({
-    host: 'localhost',
-    user: 'root',
-    password: 'password', // o tu contraseña de MySQL
-    database: 'magni_plastic_erp' // asegúrate de poner el nombre exacto de tu BD
 });

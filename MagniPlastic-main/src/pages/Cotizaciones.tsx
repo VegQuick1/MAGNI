@@ -8,7 +8,7 @@ import { SectionHeader } from "@/app/components/erp/SectionHeader";
 import { SalesChart } from "@/app/components/erp/SalesChart";
 import { cn } from "@/lib/utils";
 import { quotes as seedQuotes, segments } from "@/data/mock";
-import { fetchCotizaciones, crearCotizacionApi } from "@/services/api";
+import { fetchCotizaciones, crearCotizacionApi, fetchContactos } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 
 const statusStyles: Record<string, string> = {
@@ -53,8 +53,9 @@ export default function Cotizaciones() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedQuote, setSelectedQuote] = useState<any | null>(null);
+  const [contactosList, setContactosList] = useState<any[]>([]);
 
-  // Cargar cotizaciones desde MySQL al iniciar
+  // Cargar cotizaciones y contactos desde la BD local al iniciar
   useEffect(() => {
     fetchCotizaciones()
       .then((data) => {
@@ -63,6 +64,12 @@ export default function Cotizaciones() {
         }
       })
       .catch((err) => console.log("Usando cotizaciones locales por defecto", err));
+
+    fetchContactos()
+      .then((data) => {
+        if (data) setContactosList(data);
+      })
+      .catch((err) => console.log("Error al cargar contactos", err));
   }, []);
 
   const filtered = useMemo(
@@ -87,14 +94,13 @@ export default function Cotizaciones() {
     try {
       await crearCotizacionApi(form);
 
-      // Recargar lista actualizada
       const updated = await fetchCotizaciones();
       if (updated && updated.length > 0) {
         setQuotes(updated);
       }
 
       setSubmitted(true);
-      toast({ title: "Cotización creada", description: "Guardada exitosamente en la base de datos." });
+      toast({ title: "Cotización creada", description: "Guardada exitosamente en la base de datos local." });
       
       setTimeout(() => {
         setDrawerOpen(false);
@@ -119,7 +125,7 @@ export default function Cotizaciones() {
     <div className="space-y-5">
       <SectionHeader
         title="Cotizaciones"
-        description="Seguimiento segmentado por tipo de cliente sincronizado con base de datos."
+        description="Seguimiento segmentado por tipo de cliente sincronizado con base de datos local."
         actions={
           <Button
             onClick={() => setDrawerOpen(true)}
@@ -130,7 +136,6 @@ export default function Cotizaciones() {
         }
       />
 
-      {/* Gráfica de ventas */}
       <SalesChart />
 
       <div className="flex flex-wrap gap-2">
@@ -205,7 +210,6 @@ export default function Cotizaciones() {
         return (
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setSelectedQuote(null)}>
             <div className="bg-card rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-              {/* Header */}
               <div className="flex items-start justify-between px-8 py-6 border-b border-border">
                 <div>
                   <div className="flex items-center gap-3 mb-1">
@@ -224,7 +228,6 @@ export default function Cotizaciones() {
                 </div>
               </div>
 
-              {/* Body */}
               <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
                 <div className="grid grid-cols-3 gap-4">
                   <div className="bg-surface-2 rounded-xl p-4 text-center">
@@ -279,7 +282,6 @@ export default function Cotizaciones() {
                 )}
               </div>
 
-              {/* Footer */}
               <div className="px-8 py-5 border-t border-border flex justify-end">
                 <Button onClick={() => setSelectedQuote(null)} className="h-11 px-8 text-base font-bold" style={{ backgroundColor: "#2563eb", color: "white" }}>
                   Cerrar
@@ -313,7 +315,7 @@ export default function Cotizaciones() {
                   </div>
                   <h3 className="text-2xl font-bold text-success">¡Cotización guardada!</h3>
                   <p className="text-base text-foreground font-bold text-center">
-                    La cotización fue registrada en la base de datos con estatus <strong>En revisión</strong>.
+                    La cotización fue registrada en la base de datos local con estatus <strong>En revisión</strong>.
                   </p>
                 </div>
               ) : (
@@ -324,14 +326,20 @@ export default function Cotizaciones() {
                       <h3 className="text-lg font-bold">Datos del Cliente</h3>
                     </div>
                     <div>
-                      <label className="text-sm font-bold mb-1.5 block">Cliente <span className="text-destructive">*</span></label>
-                      <Input
-                        required
-                        placeholder="Nombre de la empresa"
-                        value={form.cliente}
-                        onChange={(e) => set("cliente", e.target.value)}
-                        className="h-11 border-2 font-semibold"
-                      />
+                      <label className="text-sm font-bold mb-1.5 block">Cliente / Empresa <span className="text-destructive">*</span></label>
+                      <select
+                      required
+                      value={form.cliente}
+                      onChange={(e) => set("cliente", e.target.value)}
+                      className="w-full h-11 px-3 rounded-md border-2 border-border bg-surface-2 text-base font-semibold"
+                    >
+                      <option value="">Seleccione un cliente de la agenda...</option>
+                      {contactosList.map((c) => (
+                        <option key={c.id} value={`${c.name} (${c.company})`}>
+                          {c.name} — {c.company} ({c.type})
+                        </option>
+                      ))}
+                    </select>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>

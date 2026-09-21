@@ -25,7 +25,7 @@ import {
   BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { fetchVentas, crearEmbarqueApi, crearVentaApi } from "@/services/api";
+import { fetchVentas, crearEmbarqueApi, crearVentaApi, fetchContactos } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 
 interface Sale {
@@ -69,6 +69,7 @@ export default function Ventas() {
   const [dateTo, setDateTo] = useState("");
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [loading, setLoading] = useState(false);
+  const [contactosList, setContactosList] = useState<any[]>([]);
 
   // Estados para Embarque
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -80,9 +81,9 @@ export default function Ventas() {
 
   // Estados para Nueva Venta
   const [ventaDrawerOpen, setVentaDrawerOpen] = useState(false);
-  const [vCliente, setVCliente] = useState("");
+  const [vPersona, setVPersona] = useState("");
+  const [vEmpresa, setVEmpresa] = useState("");
   const [vDestino, setVDestino] = useState("");
-  const [vContacto, setVContacto] = useState("");
   const [vTelefono, setVTelefono] = useState("");
   const [vEmail, setVEmail] = useState("");
   const [vCondiciones, setVCondiciones] = useState("Contado");
@@ -102,7 +103,23 @@ export default function Ventas() {
 
   useEffect(() => {
     loadVentas();
+    fetchContactos()
+      .then((data) => {
+        if (data) setContactosList(data);
+      })
+      .catch((err) => console.log("Error al cargar contactos para ventas", err));
   }, []);
+
+  // Función para autocompletar la empresa al seleccionar un contacto
+  const handleSelectContacto = (nombrePersona: string) => {
+  setVPersona(nombrePersona);
+  const encontrado = contactosList.map(c => c).find((c: any) => c.name === nombrePersona);
+  if (encontrado) {
+    setVEmpresa(encontrado.company || "");
+    if (encontrado.phone) setVTelefono(encontrado.phone);
+    if (encontrado.email) setVEmail(encontrado.email);
+  }
+};
 
   const filteredSales = sales.filter((sale) => {
     const matchesSearch =
@@ -130,7 +147,7 @@ export default function Ventas() {
       });
 
       await loadVentas();
-      toast({ title: "Embarque creado", description: "Se actualizó el estatus de transporte en la base de datos." });
+      toast({ title: "Embarque creado", description: "Se actualizó el estatus de transporte en la BD." });
       setDrawerOpen(false);
       setSelectedFactura("");
       setSelectedChofer("");
@@ -149,10 +166,12 @@ export default function Ventas() {
     e.preventDefault();
     setLoading(true);
     try {
+      // Guardamos combinando Empresa y Persona para mantener el formato del ERP
+      const clienteFinal = vEmpresa ? `${vEmpresa} (${vPersona})` : vPersona;
       await crearVentaApi({
-        cliente: vCliente,
+        cliente: clienteFinal,
         destino: vDestino,
-        contacto: vContacto,
+        contacto: vPersona,
         telefono: vTelefono,
         email: vEmail,
         condiciones_pago: vCondiciones,
@@ -161,9 +180,9 @@ export default function Ventas() {
       });
 
       await loadVentas();
-      toast({ title: "Venta registrada", description: "Se ha generado un nuevo folio en la base de datos." });
+      toast({ title: "Venta registrada", description: "Se ha generado un nuevo folio en la base de datos local." });
       setVentaDrawerOpen(false);
-      setVCliente(""); setVDestino(""); setVContacto(""); setVTelefono("");
+      setVPersona(""); setVEmpresa(""); setVDestino(""); setVTelefono("");
       setVEmail(""); setVCondiciones("Contado"); setVMonto(""); setVNotas("");
     } catch (error) {
       console.error("Error al registrar venta:", error);
@@ -181,7 +200,6 @@ export default function Ventas() {
 
   return (
     <div className="h-[calc(100vh-4rem)] flex flex-col">
-      {/* Header */}
       <div className="bg-card border-b border-border p-6">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -235,7 +253,6 @@ export default function Ventas() {
         </div>
       </div>
 
-      {/* Table */}
       <div className="flex-1 overflow-auto bg-background p-6">
         <Card className="bg-card border-border">
           <div className="overflow-x-auto">
@@ -306,7 +323,6 @@ export default function Ventas() {
         </Card>
       </div>
 
-      {/* Modal detalle de venta (se mantiene intacto) */}
       {selectedSale && (
         <div
           className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
@@ -391,7 +407,7 @@ export default function Ventas() {
         </div>
       )}
 
-      {/* Drawer - Nueva Venta (Nuevo formulario) */}
+      {/* Drawer - Registrar Nueva Venta */}
       {ventaDrawerOpen && (
         <>
           <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setVentaDrawerOpen(false)} />
@@ -412,23 +428,44 @@ export default function Ventas() {
                   <User className="h-6 w-6 text-success" />
                   <h3 className="text-xl font-bold">Datos del Cliente</h3>
                 </div>
+
+                {/* 1. Selector de Contacto / Persona */}
                 <div>
-                  <label className="text-base font-bold mb-2 block">Nombre del Cliente / Empresa <span className="text-destructive">*</span></label>
-                  <Input required value={vCliente} onChange={(e) => setVCliente(e.target.value)} placeholder="Ej. AutoParts S.A. de C.V." className="h-12 border-2" />
+                  <label className="text-base font-bold mb-2 block">Seleccionar de Contactos (Persona)</label>
+                  <select
+                  onChange={(e) => handleSelectContacto(e.target.value)}
+                  className="w-full h-12 px-4 rounded-md border-2 border-border bg-surface-2 text-base font-semibold"
+                >
+                  <option value="">Seleccione una persona de la agenda...</option>
+                  {contactosList.map((c) => (
+                    <option key={c.id} value={c.name}>
+                      {c.name} ({c.company})
+                    </option>
+                  ))}
+                </select>
                 </div>
+
+                {/* 2. Cuadrícula de 2 columnas: Nombre de la persona y Empresa (Editable) */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-base font-bold mb-2 block">Contacto</label>
-                    <Input value={vContacto} onChange={(e) => setVContacto(e.target.value)} placeholder="Nombre del encargado" className="h-12 border-2" />
+                    <label className="text-base font-bold mb-2 block">Nombre del Encargado <span className="text-destructive">*</span></label>
+                    <Input required value={vPersona} onChange={(e) => setVPersona(e.target.value)} placeholder="Ej. Gerardo Ulloa" className="h-12 border-2" />
                   </div>
+                  <div>
+                    <label className="text-base font-bold mb-2 block">Empresa <span className="text-destructive">*</span></label>
+                    <Input required value={vEmpresa} onChange={(e) => setVEmpresa(e.target.value)} placeholder="Ej. Automotriz S.A. de C.V." className="h-12 border-2 font-semibold" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-base font-bold mb-2 block">Teléfono</label>
                     <Input value={vTelefono} onChange={(e) => setVTelefono(e.target.value)} placeholder="(81) 0000-0000" className="h-12 border-2" />
                   </div>
-                </div>
-                <div>
-                  <label className="text-base font-bold mb-2 block">Correo Electrónico</label>
-                  <Input type="email" value={vEmail} onChange={(e) => setVEmail(e.target.value)} placeholder="correo@empresa.com" className="h-12 border-2" />
+                  <div>
+                    <label className="text-base font-bold mb-2 block">Correo Electrónico</label>
+                    <Input type="email" value={vEmail} onChange={(e) => setVEmail(e.target.value)} placeholder="correo@empresa.com" className="h-12 border-2" />
+                  </div>
                 </div>
               </div>
 
@@ -481,7 +518,7 @@ export default function Ventas() {
           <div className="fixed right-0 top-0 h-full w-full max-w-2xl bg-card shadow-2xl z-50 overflow-y-auto">
             <div className="sticky top-0 bg-card border-b border-border px-6 py-5 flex items-center justify-between z-10">
               <div>
-                <h2 className="text-2xl font-bold" style={{ color: "#2563eb" }}>Nuevo Embarque (MySQL)</h2>
+                <h2 className="text-2xl font-bold" style={{ color: "#2563eb" }}>Nuevo Embarque</h2>
                 <p className="text-base text-foreground font-bold mt-1">Vincular factura y asignar transporte en la base de datos</p>
               </div>
               <button onClick={() => setDrawerOpen(false)} className="p-2 hover:bg-surface-2 rounded-lg transition-colors">
