@@ -27,12 +27,32 @@ const db = new sqlite3.Database(dbFile, (err) => {
 // Crear tablas y datos iniciales de forma automática si no existen
 db.serialize(() => {
     // --- CREACIÓN DE TABLAS ---
+
+    db.run(`CREATE TABLE IF NOT EXISTS productos_venta (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        venta_id INTEGER,
+        part_number TEXT,
+        descripcion TEXT,
+        cantidad REAL,
+        peso REAL
+    )`);
+    
     db.run(`CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT UNIQUE,
         password TEXT,
         role TEXT,
         nombre TEXT
+    )`);
+
+    db.run(`CREATE TABLE IF NOT EXISTS movimientos_inventario (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sku TEXT,
+        tipo TEXT,
+        cantidad REAL,
+        lote TEXT,
+        notas TEXT,
+        fecha_registro DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
 
     db.run(`CREATE TABLE IF NOT EXISTS inventario (
