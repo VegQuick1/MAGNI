@@ -215,6 +215,19 @@ export const enviarSolicitudInterna = async (datos: any) => {
     return crearSolicitudApi(datos);
 };
 
+export const actualizarEstatusSolicitud = async (id: string, status: string, motivo_rechazo?: string) => {
+    const response = await fetch(`${API_URL}/solicitudes/${id}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, motivo_rechazo }),
+    });
+    if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Error al actualizar estatus');
+    }
+    return response.json();
+};
+
 
 
 export const fetchTareasOperador = async () => {
@@ -266,6 +279,30 @@ export const crearItemInventario = async (data: { sku: string; name: string; cat
     if (!response.ok) {
         const errData = await response.json();
         throw new Error(errData.error || 'Error al crear material');
+    }
+    return response.json();
+};
+
+export const editarItemInventario = async (sku: string, data: { name: string; category: string; location: string; stock: number; min: number; unit: string }) => {
+    const response = await fetch(`${API_URL}/inventario/${encodeURIComponent(sku)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Error al editar material');
+    }
+    return response.json();
+};
+
+export const eliminarItemInventario = async (sku: string) => {
+    const response = await fetch(`${API_URL}/inventario/${encodeURIComponent(sku)}`, {
+        method: 'DELETE',
+    });
+    if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.error || 'Error al eliminar material');
     }
     return response.json();
 };

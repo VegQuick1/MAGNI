@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 
-type Role = "gerencia" | "operador";
+type Role = "gerencia" | "operador" | "rh";
 
 interface RoleContextType {
   role: Role;
   setRole: (role: Role) => void;
   isGerencia: boolean;
   isOperador: boolean;
+  isRH: boolean;
 }
 
 const RoleContext = createContext<RoleContextType | undefined>(undefined);
@@ -33,6 +34,7 @@ export function RoleProvider({ children }: { children: React.ReactNode }) {
         setRole,
         isGerencia: role === "gerencia",
         isOperador: role === "operador",
+        isRH: role === "rh",
       }}
     >
       {children}

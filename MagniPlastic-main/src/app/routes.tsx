@@ -28,14 +28,24 @@ function GerenciaRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = localStorage.getItem("isAuthenticated") === "true";
   const userRole = localStorage.getItem("userRole");
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (userRole !== "gerencia") return <Navigate to="/asistencia" replace />;
+  if (userRole !== "gerencia") return <Navigate to={userRole === "rh" ? "/solicitudes" : "/asistencia"} replace />;
   return <>{children}</>;
 }
 
 // Índice inteligente: gerencia → Dashboard, operador → Asistencia
+
+function OperadorRoute({ children }: { children: React.ReactNode }) {
+  const isAuthenticated = localStorage.getItem("isAuthenticated") === "true";
+  const userRole = localStorage.getItem("userRole");
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (userRole === "rh") return <Navigate to="/solicitudes" replace />;
+  return <>{children}</>;
+}
+
 function SmartIndex() {
   const userRole = localStorage.getItem("userRole");
   if (userRole === "gerencia") return <Dashboard />;
+  if (userRole === "rh") return <Navigate to="/solicitudes" replace />;
   return <Navigate to="/asistencia" replace />;
 }
 
@@ -52,7 +62,9 @@ export const router = createBrowserRouter([
     path: "/configuracion",
     element: (
       <ProtectedRoute>
-        <Configuracion />
+        <OperadorRoute>
+          <Configuracion />
+        </OperadorRoute>
       </ProtectedRoute>
     ),
   },
@@ -73,8 +85,8 @@ export const router = createBrowserRouter([
     ),
     children: [
       { index: true, element: <SmartIndex /> },
-      { path: "asistencia", Component: Asistencia },
-      { path: "tareas", Component: TareasOperador },
+      { path: "asistencia", element: <OperadorRoute><Asistencia /></OperadorRoute> },
+      { path: "tareas", element: <OperadorRoute><TareasOperador /></OperadorRoute> },
       {
         path: "inventario",
         element: <GerenciaRoute><Inventario /></GerenciaRoute>,

@@ -22,9 +22,11 @@ import {
   X,
   ChevronRight,
   Download,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { fetchSolicitudes, crearSolicitudApi } from "@/services/api";
+import { fetchSolicitudes, crearSolicitudApi, actualizarEstatusSolicitud } from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 
 interface Request {
@@ -40,6 +42,7 @@ interface Request {
   turno?: string;
   descripcion?: string;
   archivo?: string | null;
+  motivo_rechazo?: string;
 }
 
 const requestTypes = [
@@ -54,9 +57,9 @@ const requestTypes = [
 const statusConfig: Record<string, { label: string; color: string }> = {
   pendiente: { label: "Pendiente", color: "bg-warning/10 text-warning border-warning" },
   en_revision: { label: "En revisión", color: "bg-info/10 text-info border-info" },
-  aprobada: { label: "Aprobada", color: "bg-success/10 text-success border-success" },
-  rechazada: { label: "Rechazada", color: "bg-destructive/10 text-destructive border-destructive" },
-  finalizada: { label: "Finalizada", color: "bg-secondary text-foreground border-border" },
+  aprobada: { label: "Finalizado", color: "bg-success/10 text-success border-success" },
+  rechazada: { label: "Finalizado", color: "bg-destructive/10 text-destructive border-destructive" },
+  finalizada: { label: "Finalizado", color: "bg-success/10 text-success border-success" },
 };
 
 const priorityConfig: Record<string, { label: string; color: string }> = {
@@ -81,6 +84,48 @@ export default function Solicitudes() {
   const [turno, setTurno] = useState("");
   const [prioridad, setPrioridad] = useState("media");
   const [descripcion, setDescripcion] = useState("");
+  const userRole = localStorage.getItem("userRole");
+  const [showRejectBox, setShowRejectBox] = useState(false);
+  const [motivoRechazoInput, setMotivoRechazoInput] = useState("");
+  const [processingAction, setProcessingAction] = useState(false);
+
+  const handleAprobar = async () => {
+    if (!selectedRequest) return;
+    setProcessingAction(true);
+    try {
+      await actualizarEstatusSolicitud(selectedRequest.id, "aprobada");
+      toast({ title: "Solicitud Aprobada", description: `La solicitud ${selectedRequest.folio} fue aprobada con éxito.` });
+      setSelectedRequest({ ...selectedRequest, status: "aprobada" });
+      await loadRequests();
+    } catch (err: any) {
+      console.error(err);
+      toast({ title: "Error", description: err.message || "No se pudo aprobar la solicitud.", variant: "destructive" });
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
+  const handleConfirmReject = async () => {
+    if (!selectedRequest) return;
+    if (!motivoRechazoInput.trim()) {
+      toast({ title: "Motivo obligatorio", description: "Debes escribir el motivo por el cual se rechaza la solicitud.", variant: "destructive" });
+      return;
+    }
+    setProcessingAction(true);
+    try {
+      await actualizarEstatusSolicitud(selectedRequest.id, "rechazada", motivoRechazoInput.trim());
+      toast({ title: "Solicitud Rechazada", description: `La solicitud ${selectedRequest.folio} ha sido rechazada.` });
+      setSelectedRequest({ ...selectedRequest, status: "rechazada", motivo_rechazo: motivoRechazoInput.trim() });
+      setShowRejectBox(false);
+      setMotivoRechazoInput("");
+      await loadRequests();
+    } catch (err: any) {
+      console.error(err);
+      toast({ title: "Error", description: err.message || "No se pudo rechazar la solicitud.", variant: "destructive" });
+    } finally {
+      setProcessingAction(false);
+    }
+  };
 
   const loadRequests = async () => {
     try {
@@ -94,6 +139,7 @@ export default function Solicitudes() {
           turno: item.turno || item.shift || "",
           descripcion: item.descripcion || item.detalles || item.comentarios || "",
           archivo: item.archivo || item.evidencia || null,
+          motivo_rechazo: item.motivo_rechazo || "",
         }));
         setRequests(formatted);
       }
@@ -444,7 +490,7 @@ export default function Solicitudes() {
                 <tr 
                   key={request.id} 
                   className="hover:bg-surface-2 transition-colors cursor-pointer"
-                  onClick={() => setSelectedRequest(request)}
+                  onClick={() => { setSelectedRequest(request); setShowRejectBox(false); setMotivoRechazoInput(request.motivo_rechazo || ""); }}
                 >
                   <td className="px-6 py-4 text-base font-mono font-bold">{request.folio}</td>
                   <td className="px-6 py-4 text-base font-bold">{request.type}</td>
@@ -468,7 +514,7 @@ export default function Solicitudes() {
       </Card>
 
       {/* Modal para Ver Detalles de Solicitud */}
-      <Dialog open={!!selectedRequest} onOpenChange={(open) => !open && setSelectedRequest(null)}>
+      <Dialog open={!!selectedRequest} onOpenChange={(open) => { if (!open) { setSelectedRequest(null); setShowRejectBox(false); setMotivoRechazoInput(""); } }}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle className="text-2xl flex items-center gap-2" style={{ color: "#3b4a9a" }}>
@@ -539,11 +585,104 @@ export default function Solicitudes() {
                 </div>
               )}
 
-              <div className="flex justify-end pt-4 border-t border-border">
-                <Button onClick={() => setSelectedRequest(null)} className="h-11 px-8 font-bold" style={{ backgroundColor: "#3b4a9a", color: "white" }}>
-                  Cerrar Detalles
-                </Button>
-              </div>
+              {/* Muestra el motivo del rechazo si existe */}
+              {selectedRequest.motivo_rechazo && (
+                <div className="p-4 bg-destructive/10 border-2 border-destructive/30 rounded-lg">
+                  <p className="text-sm font-bold uppercase tracking-wider text-destructive mb-1 flex items-center gap-1.5">
+                    <XCircle className="h-4 w-4" /> Comentario de Rechazo:
+                  </p>
+                  <p className="text-base font-semibold text-destructive">
+                    {selectedRequest.motivo_rechazo}
+                  </p>
+                </div>
+              )}
+
+              {/* Botones de acción: SOLO Recursos Humanos puede aceptar o rechazar */}
+              {userRole === "rh" ? (
+                <div className="pt-4 border-t border-border space-y-4">
+                  <h4 className="text-base font-bold text-foreground">
+                    Resolución de Recursos Humanos
+                  </h4>
+
+                  {showRejectBox ? (
+                    <div className="p-4 bg-destructive/5 border-2 border-destructive/40 rounded-lg space-y-3">
+                      <label className="text-sm font-bold text-destructive block">
+                        Escribe el motivo por el cual se rechaza esta solicitud:
+                      </label>
+                      <textarea
+                        value={motivoRechazoInput}
+                        onChange={(e) => setMotivoRechazoInput(e.target.value)}
+                        placeholder="Ejemplo: No cuenta con días disponibles / Documentación incompleta..."
+                        className="w-full min-h-[90px] p-3 rounded-md border border-destructive/50 bg-background text-base font-medium focus:outline-none focus:ring-2 focus:ring-destructive"
+                      />
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => {
+                            setShowRejectBox(false);
+                            setMotivoRechazoInput("");
+                          }}
+                          disabled={processingAction}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button
+                          type="button"
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90 font-bold"
+                          onClick={handleConfirmReject}
+                          disabled={processingAction}
+                        >
+                          {processingAction ? "Guardando..." : "Confirmar Rechazo"}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-3 items-center justify-between">
+                      <div className="flex gap-3">
+                        <Button
+                          type="button"
+                          className="bg-success text-success-foreground hover:bg-success/90 font-bold text-base h-11 px-5"
+                          onClick={handleAprobar}
+                          disabled={processingAction || selectedRequest.status === "aprobada"}
+                        >
+                          ✓ Aceptar Solicitud
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          className="font-bold text-base h-11 px-5"
+                          onClick={() => setShowRejectBox(true)}
+                          disabled={processingAction || selectedRequest.status === "rechazada"}
+                        >
+                          ✕ Rechazar Solicitud
+                        </Button>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setSelectedRequest(null);
+                          setShowRejectBox(false);
+                        }}
+                        className="h-11 font-semibold"
+                      >
+                        Cerrar
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex justify-end pt-4 border-t border-border">
+                  <Button
+                    onClick={() => setSelectedRequest(null)}
+                    className="h-11 px-8 font-bold"
+                    style={{ backgroundColor: "#3b4a9a", color: "white" }}
+                  >
+                    Cerrar Detalles
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>

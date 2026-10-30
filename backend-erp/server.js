@@ -144,6 +144,7 @@ db.serialize(() => {
         estatus TEXT
     )`);
 
+    db.run(`ALTER TABLE solicitudes ADD COLUMN motivo_rechazo TEXT`, () => {});
     db.run(`CREATE TABLE IF NOT EXISTS solicitudes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         folio TEXT,
@@ -187,6 +188,8 @@ db.serialize(() => {
             db.run(`INSERT INTO usuarios (email, password, role, nombre) VALUES ('gerencia@magniplastic.com', 'gerencia123', 'gerencia', 'Gerente General')`);
             db.run(`INSERT INTO usuarios (email, password, role, nombre) VALUES ('operador@magniplastic.com', 'operador123', 'operador', 'Operador de Planta')`);
         }
+        // Asegurar usuario de Recursos Humanos
+        db.run(`INSERT OR IGNORE INTO usuarios (email, password, role, nombre) VALUES ('RH@magniplastic.com', 'RH123', 'rh', 'Recursos Humanos')`);
     });
 
     // 2. Inventario inicial
@@ -211,7 +214,7 @@ db.serialize(() => {
 // --- AUTENTICACIÓN / LOGIN ---
 app.post('/api/auth/login', (req, res) => {
     const { email, password } = req.body;
-    const query = 'SELECT email, role, nombre FROM usuarios WHERE email = ? AND password = ?';
+    const query = 'SELECT email, role, nombre FROM usuarios WHERE LOWER(email) = LOWER(?) AND password = ?';
     db.get(query, [email, password], (err, user) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!user) {
@@ -269,6 +272,30 @@ app.post('/api/inventario/nuevo', (req, res) => {
     db.run(query, [sku, name, category, location, stock || 0, min || 50, unit || 'pza'], function(err) {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ message: "Material creado exitosamente en inventario", id: this.lastID });
+    });
+});
+
+app.put('/api/inventario/:sku', (req, res) => {
+    const { sku } = req.params;
+    const { name, category, location, stock, min, unit } = req.body;
+    const query = `
+        UPDATE inventario
+        SET name = ?, category = ?, location = ?, stock = ?, min_stock = ?, unit = ?
+        WHERE sku = ?
+    `;
+    db.run(query, [name, category, location, stock, min, unit, sku], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ error: 'Artículo no encontrado' });
+        res.json({ message: 'Material actualizado correctamente' });
+    });
+});
+
+app.delete('/api/inventario/:sku', (req, res) => {
+    const { sku } = req.params;
+    db.run('DELETE FROM inventario WHERE sku = ?', [sku], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ error: 'Artículo no encontrado' });
+        res.json({ message: 'Material eliminado correctamente' });
     });
 });
 
@@ -514,7 +541,8 @@ app.get('/api/solicitudes', (req, res) => {
             descripcion: row.descripcion,
             status: row.estatus,
             date: row.fecha || '',
-            archivo: row.archivo
+            archivo: row.archivo,
+            motivo_rechazo: row.motivo_rechazo || ''
         }));
         res.json(formatted);
     });
@@ -535,6 +563,22 @@ app.post('/api/solicitudes', (req, res) => {
         res.json({ message: 'Solicitud creada con éxito', id: this.lastID });
     });
 });
+
+const handleUpdateSolicitudStatus = (req, res) => {
+    const { id } = req.params;
+    const { status, motivo_rechazo } = req.body;
+    const query = 'UPDATE solicitudes SET estatus = ?, motivo_rechazo = ? WHERE id = ?';
+    db.run(query, [status, motivo_rechazo || null, id], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
+        if (this.changes === 0) return res.status(404).json({ error: 'Solicitud no encontrada' });
+        res.json({ message: 'Estatus de solicitud actualizado con éxito', status, motivo_rechazo });
+    });
+};
+
+app.put('/api/solicitudes/:id/status', handleUpdateSolicitudStatus);
+app.patch('/api/solicitudes/:id/status', handleUpdateSolicitudStatus);
+app.post('/api/solicitudes/:id/status', handleUpdateSolicitudStatus);
+app.put('/api/solicitudes/:id', handleUpdateSolicitudStatus);
 
 // --- TAREAS DEL OPERADOR ---
 app.get('/api/tareas-operador', (req, res) => {

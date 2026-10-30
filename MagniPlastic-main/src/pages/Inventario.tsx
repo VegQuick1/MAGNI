@@ -14,9 +14,15 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/app/components/ui/select";
-import { Search, ArrowDownToLine, ArrowUpFromLine, MapPin, Plus } from "lucide-react";
+import { Search, ArrowDownToLine, ArrowUpFromLine, MapPin, Plus, Pencil, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { fetchInventarioApi, registrarMovimientoInventario, crearItemInventario } from "@/services/api";
+import {
+  fetchInventarioApi,
+  registrarMovimientoInventario,
+  crearItemInventario,
+  editarItemInventario,
+  eliminarItemInventario,
+} from "@/services/api";
 import { toast } from "@/hooks/use-toast";
 
 interface Item {
@@ -107,6 +113,7 @@ export default function Inventario() {
               <TableHead className="hidden md:table-cell font-bold">Ubicación</TableHead>
               <TableHead className="text-right font-bold">Stock</TableHead>
               <TableHead className="text-right font-bold">Estado</TableHead>
+              <TableHead className="text-right font-bold">Acciones</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -136,6 +143,12 @@ export default function Inventario() {
                       {status === "critico" ? "Crítico" : status === "bajo" ? "Bajo" : "OK"}
                     </span>
                   </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <EditarItemDialog item={i} onSuccess={loadData} />
+                      <EliminarItemDialog item={i} onSuccess={loadData} />
+                    </div>
+                  </TableCell>
                 </TableRow>
               );
             })}
@@ -152,6 +165,190 @@ export default function Inventario() {
   );
 }
 
+// ─── DIALOG: EDITAR ARTÍCULO ─────────────────────────────────────────────────
+function EditarItemDialog({ item, onSuccess }: { item: Item; onSuccess: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(item.name);
+  const [category, setCategory] = useState(item.category);
+  const [location, setLocation] = useState(item.location);
+  const [stock, setStock] = useState(String(item.stock));
+  const [min, setMin] = useState(String(item.min));
+  const [unit, setUnit] = useState(item.unit);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setName(item.name);
+      setCategory(item.category);
+      setLocation(item.location);
+      setStock(String(item.stock));
+      setMin(String(item.min));
+      setUnit(item.unit);
+    }
+  }, [open, item]);
+
+  const handleSave = async () => {
+    if (!name) {
+      toast({ title: "Faltan datos", description: "El nombre es obligatorio.", variant: "destructive" });
+      return;
+    }
+    setLoading(true);
+    try {
+      await editarItemInventario(item.sku, {
+        name,
+        category,
+        location: location || "Almacén General",
+        stock: parseFloat(stock) || 0,
+        min: parseFloat(min) || 50,
+        unit,
+      });
+      toast({ title: "Éxito", description: "Material actualizado correctamente." });
+      onSuccess();
+      setOpen(false);
+    } catch (error) {
+      console.error("Error al editar material:", error);
+      toast({ title: "Error", description: "No se pudo actualizar el material.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-foreground hover:bg-accent/20 hover:text-accent transition-colors"
+          title="Editar material"
+        >
+          <Pencil className="h-4 w-4" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="bg-card border-border">
+        <DialogHeader>
+          <DialogTitle className="text-xl font-bold">Editar material</DialogTitle>
+          <DialogDescription>
+            Modificando: <span className="font-mono font-bold text-accent">{item.sku}</span>
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-3 py-2">
+          <Input
+            placeholder="Nombre del Material"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="bg-surface-2"
+          />
+          <Select value={category} onValueChange={setCategory}>
+            <SelectTrigger className="bg-surface-2"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Resina">Resina</SelectItem>
+              <SelectItem value="Pigmento">Pigmento</SelectItem>
+              <SelectItem value="Reproceso">Reproceso</SelectItem>
+              <SelectItem value="Empaque">Empaque</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input
+            placeholder="Ubicación (ej. Almacén A-1)"
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            className="bg-surface-2"
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              type="number"
+              placeholder="Stock"
+              value={stock}
+              onChange={(e) => setStock(e.target.value)}
+              className="bg-surface-2 font-mono"
+            />
+            <Input
+              type="number"
+              placeholder="Stock Mínimo"
+              value={min}
+              onChange={(e) => setMin(e.target.value)}
+              className="bg-surface-2 font-mono"
+            />
+          </div>
+          <Select value={unit} onValueChange={setUnit}>
+            <SelectTrigger className="bg-surface-2"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pza">Piezas (pza)</SelectItem>
+              <SelectItem value="kg">Kilogramos (kg)</SelectItem>
+              <SelectItem value="lt">Litros (lt)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
+          <Button onClick={handleSave} disabled={loading} className="bg-accent text-accent-foreground hover:bg-accent/90">
+            {loading ? "Guardando..." : "Guardar Cambios"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── DIALOG: ELIMINAR ARTÍCULO ────────────────────────────────────────────────
+function EliminarItemDialog({ item, onSuccess }: { item: Item; onSuccess: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleDelete = async () => {
+    setLoading(true);
+    try {
+      await eliminarItemInventario(item.sku);
+      toast({ title: "Eliminado", description: `"${item.name}" fue eliminado del inventario.` });
+      onSuccess();
+      setOpen(false);
+    } catch (error) {
+      console.error("Error al eliminar material:", error);
+      toast({ title: "Error", description: "No se pudo eliminar el material.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+          title="Eliminar material"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="bg-card border-border max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="text-xl font-bold text-destructive">Eliminar material</DialogTitle>
+          <DialogDescription className="text-base">
+            ¿Estás seguro de que deseas eliminar{" "}
+            <span className="font-bold text-foreground">"{item.name}"</span>{" "}
+            (<span className="font-mono font-bold text-accent">{item.sku}</span>)?
+            <br />
+            <span className="text-destructive font-semibold">Esta acción no se puede deshacer.</span>
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="gap-2">
+          <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
+          <Button
+            onClick={handleDelete}
+            disabled={loading}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {loading ? "Eliminando..." : "Confirmar eliminación"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── DIALOG: NUEVO MATERIAL ───────────────────────────────────────────────────
 function NuevoMaterialDialog({ onSuccess }: { onSuccess: () => void }) {
   const [open, setOpen] = useState(false);
   const [sku, setSku] = useState("");

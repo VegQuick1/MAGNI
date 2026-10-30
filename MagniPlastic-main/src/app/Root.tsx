@@ -42,6 +42,10 @@ const operadorNavItems = [
   { path: "/solicitudes", label: "Solicitudes", icon: FileStack },
 ];
 
+const rhNavItems = [
+  { path: "/solicitudes", label: "Solicitudes", icon: FileStack },
+];
+
 export default function Root() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -49,7 +53,7 @@ export default function Root() {
 
   // Seleccionar items de navegación según el rol
   const userRole = localStorage.getItem("userRole") || "operador";
-  const navItems = userRole === "gerencia" ? gerenciaNavItems : operadorNavItems;
+  const navItems = userRole === "gerencia" ? gerenciaNavItems : userRole === "rh" ? rhNavItems : operadorNavItems;
 
   const handleLogout = () => {
     localStorage.removeItem("isAuthenticated");
@@ -101,7 +105,7 @@ export default function Root() {
                     : "bg-surface-2 text-foreground border-border"
                 )}
               >
-                {userRole === "gerencia" ? "Gerencia" : "Operador"}
+                {userRole === "gerencia" ? "Gerencia" : userRole === "rh" ? "Recursos Humanos" : "Operador"}
               </Badge>
             </div>
             <Button
@@ -217,6 +221,7 @@ export default function Root() {
                   {!sidebarCollapsed && "Contactos"}
                 </NavLink>
               )}
+              {userRole !== "rh" && (
               <NavLink
                 to="/configuracion"
                 className={({ isActive }) =>
@@ -233,6 +238,7 @@ export default function Root() {
                 <Settings className="h-5 w-5 flex-shrink-0" />
                 {!sidebarCollapsed && "Configuración"}
               </NavLink>
+              )}
             </div>
           </nav>
         </aside>

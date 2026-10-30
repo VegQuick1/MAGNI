@@ -122,6 +122,7 @@ export default function Login() {
             <div className="space-y-1 text-xs text-foreground font-bold">
               <p>👤 gerencia@magniplastic.com / gerencia123</p>
               <p>🔧 operador@magniplastic.com / operador123</p>
+              <p>📋 RH@magniplastic.com / RH123</p>
             </div>
           </div>
         </form>
